@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VS License Manager</title>
+<style>
+  /* ── Reset ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* ── Tokens ── */
+  :root {
+    --bg:        #0f1117;
+    --surface:   #161b27;
+    --surface2:  #1c2333;
+    --border:    #2a3145;
+    --border2:   #3a4560;
+    --accent:    #5c6ef0;
+    --accent-h:  #7c8ef8;
+    --accent-dim:#5c6ef022;
+    --green:     #3dd68c;
+    --green-dim: #3dd68c18;
+    --amber:     #f5a623;
+    --amber-dim: #f5a62318;
+    --red:       #f25f5c;
+    --red-dim:   #f25f5c18;
+    --text:      #e2e8f0;
+    --text-muted:#8896ae;
+    --text-dim:  #4a5568;
+    --radius:    8px;
+    --mono:      'Cascadia Code', 'Consolas', monospace;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 13px;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ── Titlebar ── */
+  #titlebar {
+    -webkit-app-region: drag;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 38px;
+    padding: 0 16px 0 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .titlebar-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .titlebar-icon {
+    width: 18px; height: 18px;
+    background: var(--accent);
+    border-radius: 4px;
+    display: grid;
+    place-items: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+  }
+  .titlebar-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.02em;
+  }
+  .titlebar-controls {
+    -webkit-app-region: no-drag;
+    display: flex;
+    gap: 6px;
+  }
+  .win-btn {
+    width: 28px; height: 22px;
+    border: none; background: transparent; cursor: pointer;
+    border-radius: 4px;
+    color: var(--text-muted);
+    font-size: 13px;
+    display: grid; place-items: center;
+    transition: background 0.15s, color 0.15s;
+  }
+  .win-btn:hover { background: var(--border); color: var(--text); }
+  .win-btn.close:hover { background: var(--red); color: #fff; }
+
+  /* ── Layout ── */
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+  #main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── Sidebar ── */
+  #sidebar {
+    width: 180px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 12px 0;
+  }
+  .nav-section-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    padding: 8px 16px 4px;
+  }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    cursor: pointer;
+    border-radius: 0;
+    color: var(--text-muted);
+    font-size: 12.5px;
+    font-weight: 500;
+    transition: background 0.12s, color 0.12s;
+    border-left: 2px solid transparent;
+    position: relative;
+  }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active {
+    background: var(--accent-dim);
+    color: var(--accent-h);
+    border-left-color: var(--accent);
+  }
+  .nav-icon { font-size: 14px; width: 16px; text-align: center; }
+
+  /* ── Admin badge ── */
+  #admin-badge {
+    margin: auto 12px 12px;
+    padding: 7px 10px;
+    border-radius: var(--radius);
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text-muted);
+  }
+  #admin-badge.is-admin { border-color: #3dd68c44; background: var(--green-dim); color: var(--green); }
+  #admin-badge.not-admin { border-color: #f25f5c44; background: var(--red-dim); color: var(--red); }
+
+  /* ── Content ── */
+  #content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 24px;
+    scroll-behavior: smooth;
+  }
+  #content::-webkit-scrollbar { width: 6px; }
+  #content::-webkit-scrollbar-track { background: transparent; }
+  #content::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  /* ── Page sections ── */
+  .page { display: none; }
+  .page.active { display: block; }
+
+  .page-header {
+    margin-bottom: 20px;
+  }
+  .page-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+  .page-sub {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 3px;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    margin-bottom: 16px;
+  }
+  .card-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--text-dim);
+    margin-bottom: 14px;
+  }
+
+  /* ── License table ── */
+  .license-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr auto;
+    gap: 0;
+  }
+  .lg-header {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--text-dim);
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .lg-header:first-child { border-radius: 6px 0 0 0; }
+  .lg-header:last-child { border-radius: 0 6px 0 0; }
+  .lg-row {
+    display: contents;
+  }
+  .lg-cell {
+    padding: 12px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    color: var(--text);
+    font-size: 13px;
+    background: var(--surface);
+    transition: background 0.1s;
+  }
+  .lg-row:hover .lg-cell { background: var(--surface2); }
+  .lg-version {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .lg-date { font-family: var(--mono); font-size: 12px; color: var(--text-muted); }
+  .lg-days { font-family: var(--mono); font-weight: 700; }
+
+  /* Status pills */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .pill.valid { background: var(--green-dim); color: var(--green); border: 1px solid #3dd68c33; }
+  .pill.expiring { background: var(--amber-dim); color: var(--amber); border: 1px solid #f5a62333; }
+  .pill.expired { background: var(--red-dim); color: var(--red); border: 1px solid #f25f5c33; }
+  .pill.not_installed { background: #ffffff0a; color: var(--text-dim); border: 1px solid var(--border); }
+  .pill.loading { background: var(--accent-dim); color: var(--accent); border: 1px solid #5c6ef033; }
+  .pill-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+
+  /* Renew btn in table */
+  .btn-renew-single {
+    padding: 5px 12px;
+    background: transparent;
+    border: 1px solid var(--border2);
+    border-radius: 5px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .btn-renew-single:hover { background: var(--accent-dim); border-color: var(--accent); color: var(--accent-h); }
+  .btn-renew-single:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+    letter-spacing: 0.01em;
+  }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-h); }
+  .btn-secondary { background: var(--surface2); color: var(--text); border-color: var(--border2); }
+  .btn-secondary:hover:not(:disabled) { background: var(--border); border-color: var(--border2); }
+  .btn-danger { background: var(--red-dim); color: var(--red); border-color: #f25f5c33; }
+  .btn-danger:hover:not(:disabled) { background: #f25f5c22; border-color: var(--red); }
+  .btn-success { background: var(--green-dim); color: var(--green); border-color: #3dd68c33; }
+  .btn-success:hover:not(:disabled) { background: #3dd68c22; border-color: var(--green); }
+
+  .btn-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+  }
+
+  /* ── Toast ── */
+  #toast-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 9999;
+    pointer-events: none;
+  }
+  .toast {
+    padding: 10px 16px;
+    border-radius: 7px;
+    font-size: 12.5px;
+    font-weight: 500;
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    animation: toastIn 0.25s ease;
+    max-width: 320px;
+  }
+  .toast.success { background: #1a2e23; border-color: #3dd68c44; color: var(--green); }
+  .toast.error { background: #2e1a1a; border-color: #f25f5c44; color: var(--red); }
+  .toast.info { background: var(--surface2); color: var(--text); }
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Scheduled Task ── */
+  .task-status-row {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .stat-block { display: flex; flex-direction: column; gap: 2px; }
+  .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-dim); font-weight: 700; }
+  .stat-value { font-size: 13px; color: var(--text); font-family: var(--mono); }
+
+  .form-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 12px; }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .form-input {
+    background: var(--bg);
+    border: 1px solid var(--border2);
+    border-radius: 5px;
+    color: var(--text);
+    padding: 7px 10px;
+    font-size: 13px;
+    font-family: var(--mono);
+    width: 100px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .form-input:focus { border-color: var(--accent); }
+
+  /* ── Log ── */
+  #log-content {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    line-height: 1.65;
+    height: 340px;
+    overflow-y: auto;
+    color: var(--text-muted);
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  #log-content::-webkit-scrollbar { width: 5px; }
+  #log-content::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+  .log-info { color: #8896ae; }
+  .log-warn { color: var(--amber); }
+  .log-error { color: var(--red); }
+  .log-ok { color: var(--green); }
+  .log-sep { color: var(--text-dim); }
+
+  /* ── Summary cards row ── */
+  .summary-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .summary-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+  }
+  .summary-count {
+    font-size: 26px;
+    font-weight: 800;
+    font-family: var(--mono);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .summary-card.valid .summary-count { color: var(--green); }
+  .summary-card.expiring .summary-count { color: var(--amber); }
+  .summary-card.expired .summary-count { color: var(--red); }
+  .summary-card.installed .summary-count { color: var(--accent-h); }
+  .summary-desc { font-size: 11px; color: var(--text-dim); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+
+  /* ── Spinner ── */
+  .spinner {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border: 2px solid var(--border2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Scrollbar global ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── Divider ── */
+  .divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+  .empty-state {
+    text-align: center;
+    padding: 32px;
+    color: var(--text-dim);
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <!-- Titlebar -->
+  <div id="titlebar">
+    <div class="titlebar-left">
+      <div class="titlebar-icon">VS</div>
+      <span class="titlebar-title">VS License Manager</span>
+    </div>
+    <div class="titlebar-controls">
+      <button class="win-btn" onclick="vsApi.minimize()">─</button>
+      <button class="win-btn" onclick="vsApi.maximize()">□</button>
+      <button class="win-btn close" onclick="vsApi.close()">✕</button>
+    </div>
+  </div>
+
+  <div id="main">
+    <!-- Sidebar -->
+    <nav id="sidebar">
+      <div class="nav-section-label">Overview</div>
+      <div class="nav-item active" data-page="dashboard" onclick="navigate(this)">
+        <span class="nav-icon">⬡</span> Dashboard
+      </div>
+      <div class="nav-item" data-page="licenses" onclick="navigate(this)">
+        <span class="nav-icon">🔑</span> Licenses
+      </div>
+      <div class="nav-section-label" style="margin-top:8px">Automation</div>
+      <div class="nav-item" data-page="scheduler" onclick="navigate(this)">
+        <span class="nav-icon">⏰</span> Scheduler
+      </div>
+      <div class="nav-item" data-page="logs" onclick="navigate(this)">
+        <span class="nav-icon">📋</span> Logs
+      </div>
+
+      <!-- Admin badge -->
+      <div id="admin-badge">
+        <span id="admin-icon">🛡</span>
+        <span id="admin-text">Checking...</span>
+      </div>
+    </nav>
+
+    <!-- Content -->
+    <div id="content">
+
+      <!-- ═══ DASHBOARD PAGE ═══ -->
+      <div class="page active" id="page-dashboard">
+        <div class="page-header">
+          <div class="page-title">Dashboard</div>
+          <div class="page-sub">Visual Studio Community license health overview</div>
+        </div>
+
+        <div class="summary-row" id="summary-row">
+          <div class="summary-card valid">
+            <div class="summary-count" id="count-valid">—</div>
+            <div class="summary-desc">Valid</div>
+          </div>
+          <div class="summary-card expiring">
+            <div class="summary-count" id="count-expiring">—</div>
+            <div class="summary-desc">Expiring soon</div>
+          </div>
+          <div class="summary-card expired">
+            <div class="summary-count" id="count-expired">—</div>
+            <div class="summary-desc">Expired</div>
+          </div>
+          <div class="summary-card installed">
+            <div class="summary-count" id="count-task">—</div>
+            <div class="summary-desc">Auto-renew</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">License Status</div>
+          <div id="license-table-dash">
+            <div style="color:var(--text-dim);font-size:12px;display:flex;align-items:center;gap:8px;">
+              <span class="spinner"></span> Loading...
+            </div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-primary" onclick="renewAll()">⟳ Renew All</button>
+            <button class="btn btn-secondary" onclick="refreshAll()">↺ Refresh</button>
+          </div>
+        </div>
+
+        <div class="card" id="task-summary-card">
+          <div class="card-title">Scheduled Task</div>
+          <div id="task-summary-content" style="color:var(--text-dim);font-size:12px;">Loading...</div>
+        </div>
+      </div>
+
+      <!-- ═══ LICENSES PAGE ═══ -->
+      <div class="page" id="page-licenses">
+        <div class="page-header">
+          <div class="page-title">Licenses</div>
+          <div class="page-sub">Manage individual VS Community edition licenses</div>
+        </div>
+        <div class="card">
+          <div class="card-title">All Editions</div>
+          <div id="license-table-full" style="color:var(--text-dim);font-size:12px;display:flex;align-items:center;gap:8px;">
+            <span class="spinner"></span> Loading...
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-primary" onclick="renewAll()">⟳ Renew All</button>
+            <button class="btn btn-secondary" onclick="refreshAll()">↺ Refresh Status</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ SCHEDULER PAGE ═══ -->
+      <div class="page" id="page-scheduler">
+        <div class="page-header">
+          <div class="page-title">Scheduler</div>
+          <div class="page-sub">Configure automatic daily license renewal via Windows Task Scheduler</div>
+        </div>
+
+        <div class="card" id="task-status-card">
+          <div class="card-title">Task Status</div>
+          <div class="task-status-row" id="task-status-row">
+            <div style="color:var(--text-dim);display:flex;align-items:center;gap:8px;"><span class="spinner"></span> Loading...</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Configure & Install</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Threshold (days)</label>
+              <input class="form-input" type="number" id="inp-threshold" value="3" min="1" max="30" style="width:80px" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Run time (24h)</label>
+              <input class="form-input" type="text" id="inp-time" value="09:00" placeholder="HH:MM" style="width:90px" />
+            </div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-success" onclick="installTask()">✓ Install Task</button>
+            <button class="btn btn-danger" onclick="uninstallTask()">✕ Remove Task</button>
+          </div>
+          <div style="margin-top:12px;font-size:11.5px;color:var(--text-dim);line-height:1.6;">
+            The task runs as <strong style="color:var(--text-muted)">SYSTEM</strong>, so it works even when you're not logged in.<br/>
+            Renewing resets the expiry to <strong style="color:var(--text-muted)">today + 31 days</strong> (the maximum VS Community allows).
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ LOGS PAGE ═══ -->
+      <div class="page" id="page-logs">
+        <div class="page-header">
+          <div class="page-title">Logs</div>
+          <div class="page-sub">Renewal activity log from <code style="color:var(--accent-h);background:var(--accent-dim);padding:1px 5px;border-radius:3px;font-size:11px;">%ProgramData%\VSCELicense\renew.log</code></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Activity Log</div>
+          <div id="log-content">Loading...</div>
+          <div class="btn-row">
+            <button class="btn btn-secondary" onclick="loadLog()">↺ Refresh</button>
+            <button class="btn btn-secondary" onclick="vsApi.openLogFile()">↗ Open in Notepad</button>
+            <button class="btn btn-danger" onclick="clearLog()">🗑 Clear Log</button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<div id="toast-container"></div>
+
+<script>
+// ─── State ───────────────────────────────────────────────────────
+let licenseData = [];
+let taskData = {};
+
+// ─── Navigation ──────────────────────────────────────────────────
+function navigate(el) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('page-' + el.dataset.page).classList.add('active');
+  if (el.dataset.page === 'logs') loadLog();
+  if (el.dataset.page === 'scheduler') loadTaskStatus();
+}
+
+// ─── Toast ───────────────────────────────────────────────────────
+function toast(msg, type = 'info') {
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  document.getElementById('toast-container').appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+// ─── Admin check ─────────────────────────────────────────────────
+async function checkAdmin() {
+  try {
+    const isAdmin = await vsApi.checkAdmin();
+    const badge = document.getElementById('admin-badge');
+    const text = document.getElementById('admin-text');
+    if (isAdmin) {
+      badge.className = 'is-admin';
+      text.textContent = 'Administrator';
+    } else {
+      // Shouldn't normally reach here since main.js auto-relaunches as admin,
+      // but show a warning just in case (e.g. UAC was cancelled)
+      badge.className = 'not-admin';
+      document.getElementById('admin-icon').textContent = '⚠';
+      text.textContent = 'Not Admin!';
+      toast('⚠ Not running as Administrator — please restart the app', 'error');
+    }
+  } catch {}
+}
+
+// ─── Status badge HTML ───────────────────────────────────────────
+function pillHtml(status) {
+  const map = {
+    valid: ['valid', '● Valid'],
+    expiring: ['expiring', '● Expiring'],
+    expired: ['expired', '● Expired'],
+    not_installed: ['not_installed', '○ Not Installed'],
+    error: ['expired', '⚠ Error'],
+    no_data: ['not_installed', '○ No Data'],
+  };
+  const [cls, label] = map[status] || ['not_installed', status];
+  return `<span class="pill ${cls}">${label}</span>`;
+}
+
+function daysHtml(daysLeft, status) {
+  if (daysLeft === null || daysLeft === undefined) return '<span style="color:var(--text-dim)">—</span>';
+  if (daysLeft < 0) return `<span style="color:var(--red);font-family:var(--mono);font-weight:700;">${daysLeft}d</span>`;
+  if (daysLeft <= 3) return `<span style="color:var(--amber);font-family:var(--mono);font-weight:700;">${daysLeft}d</span>`;
+  return `<span style="color:var(--green);font-family:var(--mono);font-weight:700;">${daysLeft}d</span>`;
+}
+
+// ─── Build license table ──────────────────────────────────────────
+function buildLicenseTable(containerId) {
+  const el = document.getElementById(containerId);
+  if (!licenseData.length) {
+    el.innerHTML = '<div class="empty-state">No Visual Studio installations detected.</div>';
+    return;
+  }
+
+  const installed = licenseData.filter(l => l.Status !== 'not_installed');
+  const data = containerId === 'license-table-dash' ? installed : licenseData;
+
+  if (!data.length) {
+    el.innerHTML = '<div class="empty-state">No installed VS Community editions found (2013–2019).</div>';
+    return;
+  }
+
+  let html = `<div class="license-grid">
+    <div class="lg-header">Version</div>
+    <div class="lg-header">Expiry Date</div>
+    <div class="lg-header">Days Left</div>
+    <div class="lg-header">Status</div>
+    <div class="lg-header">Action</div>`;
+
+  for (const lic of data) {
+    const canRenew = lic.Status !== 'not_installed' && lic.Status !== 'no_data';
+    html += `<div class="lg-row">
+      <div class="lg-cell"><span class="lg-version">VS ${lic.Version}</span></div>
+      <div class="lg-cell"><span class="lg-date">${lic.ExpiryDate || '—'}</span></div>
+      <div class="lg-cell">${daysHtml(lic.DaysLeft, lic.Status)}</div>
+      <div class="lg-cell">${pillHtml(lic.Status)}</div>
+      <div class="lg-cell">
+        <button class="btn-renew-single" ${canRenew ? '' : 'disabled'}
+          onclick="renewSingle('${lic.Version}')">Renew</button>
+      </div>
+    </div>`;
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+// ─── Update summary counts ────────────────────────────────────────
+function updateSummary() {
+  const valid = licenseData.filter(l => l.Status === 'valid').length;
+  const expiring = licenseData.filter(l => l.Status === 'expiring').length;
+  const expired = licenseData.filter(l => l.Status === 'expired').length;
+  document.getElementById('count-valid').textContent = valid;
+  document.getElementById('count-expiring').textContent = expiring;
+  document.getElementById('count-expired').textContent = expired;
+}
+
+// ─── Load licenses ────────────────────────────────────────────────
+async function loadLicenses() {
+  ['license-table-dash', 'license-table-full'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '<div style="color:var(--text-dim);font-size:12px;display:flex;align-items:center;gap:8px;"><span class="spinner"></span> Loading...</div>';
+  });
+
+  try {
+    const result = await vsApi.getLicenseStatus();
+    if (result.error) {
+      toast('Error reading licenses: ' + result.error, 'error');
+      licenseData = [];
+    } else {
+      licenseData = result.licenses || [];
+    }
+  } catch (e) {
+    toast('Failed to fetch license status', 'error');
+    licenseData = [];
+  }
+
+  buildLicenseTable('license-table-dash');
+  buildLicenseTable('license-table-full');
+  updateSummary();
+}
+
+// ─── Load task status ─────────────────────────────────────────────
+async function loadTaskStatus() {
+  try {
+    taskData = await vsApi.getTaskStatus();
+  } catch {
+    taskData = { Exists: false, State: 'Unknown', LastRun: 'N/A', NextRun: 'N/A' };
+  }
+
+  // Dashboard task summary
+  const dashEl = document.getElementById('task-summary-content');
+  if (dashEl) {
+    if (taskData.Exists) {
+      dashEl.innerHTML = `<div style="display:flex;gap:24px;">
+        <div class="stat-block"><div class="stat-label">State</div><div class="stat-value" style="color:var(--green)">${taskData.State}</div></div>
+        <div class="stat-block"><div class="stat-label">Last Run</div><div class="stat-value">${taskData.LastRun}</div></div>
+        <div class="stat-block"><div class="stat-label">Next Run</div><div class="stat-value">${taskData.NextRun}</div></div>
+      </div>`;
+      document.getElementById('count-task').textContent = 'ON';
+      document.getElementById('count-task').style.color = 'var(--green)';
+    } else {
+      dashEl.innerHTML = `<span style="color:var(--text-dim)">No scheduled task installed. Go to <strong style="color:var(--accent-h)">Scheduler</strong> to set it up.</span>`;
+      document.getElementById('count-task').textContent = 'OFF';
+      document.getElementById('count-task').style.color = 'var(--text-dim)';
+    }
+  }
+
+  // Scheduler page status row
+  const schedEl = document.getElementById('task-status-row');
+  if (schedEl) {
+    if (taskData.Exists) {
+      schedEl.innerHTML = `
+        <div class="stat-block"><div class="stat-label">Status</div><div class="stat-value">${pillHtml('valid').replace('Valid','Installed')}</div></div>
+        <div class="stat-block"><div class="stat-label">State</div><div class="stat-value" style="color:var(--green)">${taskData.State}</div></div>
+        <div class="stat-block"><div class="stat-label">Last Run</div><div class="stat-value">${taskData.LastRun}</div></div>
+        <div class="stat-block"><div class="stat-label">Next Run</div><div class="stat-value">${taskData.NextRun}</div></div>`;
+    } else {
+      schedEl.innerHTML = `<span style="color:var(--text-dim)">Task not installed.</span>`;
+    }
+  }
+}
+
+// ─── Renew single ─────────────────────────────────────────────────
+async function renewSingle(version) {
+  toast(`Renewing VS ${version}...`, 'info');
+  try {
+    const res = await vsApi.renewLicense(version);
+    if (res.success || res.stdout?.includes('RENEWED') || res.stdout?.includes('Renew')) {
+      toast(`✓ VS ${version} renewed to +31 days`, 'success');
+    } else {
+      toast(`VS ${version}: ${res.stderr || res.stdout || 'Unknown error'}`, 'error');
+    }
+    await loadLicenses();
+  } catch (e) {
+    toast('Renewal failed: ' + e.message, 'error');
+  }
+}
+
+// ─── Renew all ────────────────────────────────────────────────────
+async function renewAll() {
+  toast('Renewing all installed licenses...', 'info');
+  try {
+    const res = await vsApi.renewLicense('all');
+    if (res.success !== false) {
+      toast('✓ All licenses renewed', 'success');
+    } else {
+      toast('Some licenses may not have renewed. Check logs.', 'error');
+    }
+    await loadLicenses();
+  } catch (e) {
+    toast('Renewal failed: ' + e.message, 'error');
+  }
+}
+
+// ─── Install task ─────────────────────────────────────────────────
+async function installTask() {
+  const threshold = parseInt(document.getElementById('inp-threshold').value);
+  const runTime = document.getElementById('inp-time').value;
+  if (!runTime.match(/^([01]?\d|2[0-3]):[0-5]\d$/)) {
+    toast('Invalid time format. Use HH:MM (24h).', 'error'); return;
+  }
+  toast('Installing scheduled task...', 'info');
+  try {
+    const res = await vsApi.installTask({ thresholdDays: threshold, runTime });
+    if (res.success !== false) {
+      toast(`✓ Task installed — runs daily at ${runTime}`, 'success');
+      await loadTaskStatus();
+    } else {
+      toast('Failed to install task: ' + (res.stderr || ''), 'error');
+    }
+  } catch (e) {
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+// ─── Uninstall task ───────────────────────────────────────────────
+async function uninstallTask() {
+  toast('Removing scheduled task...', 'info');
+  try {
+    await vsApi.uninstallTask();
+    toast('✓ Scheduled task removed', 'success');
+    await loadTaskStatus();
+  } catch (e) {
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+// ─── Log ─────────────────────────────────────────────────────────
+async function loadLog() {
+  const el = document.getElementById('log-content');
+  const raw = await vsApi.readLog();
+  if (!raw) {
+    el.innerHTML = '<span style="color:var(--text-dim)">No log file found yet. Run a renewal to generate one.</span>';
+    return;
+  }
+  // Colorize log lines
+  const lines = raw.split('\n').map(line => {
+    if (line.includes('[ERROR]') || line.includes('ERROR')) return `<span class="log-error">${esc(line)}</span>`;
+    if (line.includes('[WARN]') || line.includes('⚠')) return `<span class="log-warn">${esc(line)}</span>`;
+    if (line.includes('✅') || line.includes('RENEWED') || line.includes('completed')) return `<span class="log-ok">${esc(line)}</span>`;
+    if (line.includes('====')) return `<span class="log-sep">${esc(line)}</span>`;
+    return `<span class="log-info">${esc(line)}</span>`;
+  });
+  el.innerHTML = lines.join('\n');
+  el.scrollTop = el.scrollHeight;
+}
+
+async function clearLog() {
+  const ok = await vsApi.clearLog();
+  if (ok) { toast('Log cleared', 'success'); loadLog(); }
+  else toast('Could not clear log', 'error');
+}
+
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ─── Refresh all ─────────────────────────────────────────────────
+async function refreshAll() {
+  await Promise.all([loadLicenses(), loadTaskStatus()]);
+  toast('Refreshed', 'info');
+}
+
+// ─── Init ─────────────────────────────────────────────────────────
+(async () => {
+  await checkAdmin();
+  await loadLicenses();
+  await loadTaskStatus();
+})();
+</script>
+</body>
+</html>
